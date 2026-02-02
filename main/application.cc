@@ -17,6 +17,8 @@
 #include <arpa/inet.h>
 #include <font_awesome.h>
 
+#include "screen_driver.h"
+
 #define TAG "Application"
 
 
@@ -72,6 +74,10 @@ void Application::Initialize() {
     auto codec = board.GetAudioCodec();
     audio_service_.Initialize(codec);
     audio_service_.Start();
+
+    // === 新增：初始化串口屏 ===
+    ScreenDriver::GetInstance().Init();
+    // ========================
 
     AudioServiceCallbacks callbacks;
     callbacks.on_send_queue_available = [this]() {
@@ -542,6 +548,11 @@ void Application::InitializeProtocol() {
                     ESP_LOGI(TAG, "<< %s", text->valuestring);
                     Schedule([display, message = std::string(text->valuestring)]() {
                         display->SetChatMessage("assistant", message.c_str());
+
+                        // === 【在这里添加你的代码】 ===
+                        // 把这句话也发给串口屏
+                        //ScreenDriver::GetInstance().SendSubtitle(message.c_str());
+                        // ===========================
                     });
                 }
             }
@@ -804,6 +815,10 @@ void Application::HandleStateChangedEvent() {
     auto led = board.GetLed();
     led->OnStateChanged();
     
+    // === 新增：根据状态控制屏幕 ===
+    // 获取屏幕驱动单例引用
+    auto& screen = ScreenDriver::GetInstance();
+
     switch (new_state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
@@ -811,15 +826,26 @@ void Application::HandleStateChangedEvent() {
             display->SetEmotion("neutral");
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
+
+            // --> 切换为空闲/睁眼状态
+            screen.SetEyeState(EyeState::OPEN); 
+
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
             display->SetEmotion("neutral");
             display->SetChatMessage("system", "");
+
+            // --> (可选) 连接中也可以显示思考或聆听
+            screen.SetEyeState(EyeState::THINKING);
+
             break;
         case kDeviceStateListening:
             display->SetStatus(Lang::Strings::LISTENING);
             display->SetEmotion("neutral");
+
+            // --> 切换为聆听状态 (眼睛变大或变色)
+            screen.SetEyeState(EyeState::LISTENING);
 
             // Make sure the audio processor is running
             if (!audio_service_.IsAudioProcessorRunning()) {
@@ -844,6 +870,9 @@ void Application::HandleStateChangedEvent() {
         case kDeviceStateSpeaking:
             display->SetStatus(Lang::Strings::SPEAKING);
 
+            // --> 切换为说话状态 (眼睛嘴巴动)
+            screen.SetEyeState(EyeState::SPEAKING);
+            
             if (listening_mode_ != kListeningModeRealtime) {
                 audio_service_.EnableVoiceProcessing(false);
                 // Only AFE wake word can be detected in speaking mode
@@ -916,6 +945,11 @@ bool Application::UpgradeFirmware(const std::string& url, const std::string& ver
 
     std::string message = std::string(Lang::Strings::NEW_VERSION) + version_info;
     display->SetChatMessage("system", message.c_str());
+    
+    // === 【在这里添加你的代码】 ===
+    // 把这句话也发给串口屏
+    //ScreenDriver::GetInstance().SendSubtitle(message.c_str());
+    // ===========================
 
     board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
     audio_service_.Stop();

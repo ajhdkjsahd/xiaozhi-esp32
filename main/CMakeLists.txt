@@ -36,6 +36,10 @@ set(SOURCES "audio/audio_codec.cc"
             "device_state_machine.cc"
             "assets.cc"
             "main.cc"
+            "utf8togb2312.c"
+            "screen_driver.cc"
+            "eye_animator.cc"
+            
             )
 
 set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols")
